@@ -15,7 +15,7 @@ class Login(object):
     def __init__(self):
         if len(sys.argv) < 3:
             self.account = '1778973****'
-            self.password = '********'
+            self.password = '123456'
         else:
             self.account = sys.argv[1]
             self.password = sys.argv[2]
@@ -24,31 +24,30 @@ class Login(object):
         self.browser = 'chrome'
 
         if self.browser == 'chrome':
-            driver_path = "D:\phpStudy\PHPTutorial\WWW\zwwl2016\python\chromedriver_crack.exe"
+            driver_path = "D:\phpStudy\PHPTutorial\WWW\zwwl2016\python\chromedriver.exe"
             self.c_service = Service(driver_path)
             self.c_service.command_line_args()
             self.c_service.start()
             chrome_options = Options()
-            # chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"')
+            # chrome_options.add_argument('--headless')       # 浏览器不提供可视化页面
+            chrome_options.add_argument('--no-sandbox')     # 取消沙盒模式
+            chrome_options.add_argument('--disable-gpu')    # 禁用GPU加速
             chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--start-maximized')
-            chrome_options.add_argument("--incognito")
+            chrome_options.add_argument('--start-maximized')    # 最大化运行（全屏窗口）
+            chrome_options.add_argument("--incognito")      # 隐身模式启动
             # chrome_options.add_argument("disable-infobars")       # 已弃用 去掉提示：Chrome正收到自动测试软件的控制
             # chrome_options.add_experimental_option('useAutomationExtension', False)     # 去掉提示：Chrome正收到自动测试软件的控制
 
             # 屏蔽提示：chrome正收到自动测试软件的控制
             # 在79(含79)以后的版本无效。谷歌修复了非无头模式下排除“启用自动化”时window.navigator.webdriver是未定义的问题
-            chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])    # 设置为开发者模式 去掉自动测试软件的控制提示
-
-            # 关闭开发者模式
-            # chrome_options.add_experimental_option("useAutomationExtension", False)
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])    # 去掉提示：Chrome正收到自动测试软件的控制
 
             self.driver = webdriver.Chrome(executable_path=driver_path, options=chrome_options)
-            # CDP执行JavaScript 代码  重定义windows.navigator.webdriver的值  绕过反爬机制
+
+            # CDP执行JavaScript 代码  重定义window.navigator.webdriver的值  绕过反爬机制
             # 检测机制:
-            # selenium调用驱动打开浏览器，在控制台windows.navigator.webdriver会标记FALSE，
+            # selenium调用驱动打开浏览器，在控制台window.navigator.webdriver会标记FALSE，
             # 手工正常打开的浏览器控制台window.navigator.webdriver的结果是True
             self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
                 "source": """
@@ -92,7 +91,7 @@ class Login(object):
             'LEFT JOIN pigeon_platform_account_center account ' + \
             'ON account.id = spider.platform_account_center_id ' + \
             'WHERE account.platform= %s AND account.account = %s'
-        count = cursor.execute(sql, ('花生书城', self.account))
+        count = cursor.execute(sql, ('1688', self.account))
 
         if (count > 0):
             id = cursor.fetchone()[0]
@@ -105,7 +104,7 @@ class Login(object):
                   'LEFT JOIN pigeon_platform_account_center account ' + \
                   'ON account.id = spider.platform_account_center_id ' + \
                   'WHERE account.platform= %s AND account.account = %s'
-            count = cursor.execute(sql, ('花生书城', self.account))
+            count = cursor.execute(sql, ('1688', self.account))
             if(count > 0):
                 id = cursor.fetchone()[0]
                 create_at = update_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -169,8 +168,6 @@ class Login(object):
             driver = self.driver
             driver.get(self.url)
 
-            print('1')
-
             driver.implicitly_wait(10)
             driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
 
@@ -198,27 +195,28 @@ class Login(object):
             # 获取移动轨迹
             track_list = self.get_track(slider_square_bg_width - slider_square_width)   # 调用get_track()方法，传入真实距离参数，得出移动轨迹
 
-            # print(track_list)
-
-            # track_list = [2, 3, 5, 7, 2, 3, 5, 7, 2, 3, 5, 7]
-
             # 判断方块是否显示，是则模拟鼠标滑动，否则跳过
             if slider_square.is_displayed():
                 # 找到滑块元素，点击鼠标左键，按住不放
                 ActionChains(driver).click_and_hold(slider_square).perform()  # 点击鼠标左键，不松开 perform() ——执行链中的所有动作
-                # ActionChains(driver).move_by_offset(xoffset=location_x+(slider_square_bg_width - slider_square_width), yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
+                ActionChains(driver).move_by_offset(xoffset=location_x+(slider_square_bg_width - slider_square_width), yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
 
-                # 拖动元素
-                for track in track_list:
-                    print(track)
-                    ActionChains(driver).move_by_offset(xoffset=track, yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
-                    time.sleep(0.001)
+                # # 拖动元素
+                # for track in track_list:
+                #     print(track)
+                #     ActionChains(driver).move_by_offset(xoffset=track, yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
+                #     time.sleep(0.001)
 
                 time.sleep(0.5)
                 # print("验证滑块结束")
                 ActionChains(driver).release(on_element=slider_square).perform()  # 释放鼠标
 
-            print('1')
+            # 切换到主html(最外层html)
+            driver.switch_to.default_content()
+            print(driver.find_element_by_xpath("//button[@class='fm-button fm-submit password-login']").text())
+
+            cookies_all = json.dumps(self.driver.get_cookies())
+
             pass
         except Exception as e:
             print('str(Exception):\t', str(Exception))
