@@ -4,6 +4,9 @@ from selenium.webdriver import FirefoxOptions
 from selenium.webdriver.chrome.service import Service
 import time
 from selenium import webdriver
+from PIL import Image  # Python图像库
+import numpy as np  # 矩阵计算的函数库
+import cv2  # 图像处理和计算机视觉库
 import os
 import pymysql
 import json
@@ -24,7 +27,7 @@ class Login(object):
         self.browser = 'chrome'
 
         if self.browser == 'chrome':
-            driver_path = "D:\phpStudy\PHPTutorial\WWW\zwwl2016\python\chromedriver.exe"
+            driver_path = "D:\Develop\GeckoDriver\chromedriver_win32\chromedriver.exe"
             self.c_service = Service(driver_path)
             self.c_service.command_line_args()
             self.c_service.start()
@@ -118,7 +121,7 @@ class Login(object):
         db.close()
         return result
 
-    def urllib_download(imgurl, imgsavepath):
+    def urllib_download(self,  imgurl, imgsavepath):
         """
         下载图片
         :param imgurl:      需要下载图片的url
@@ -127,12 +130,64 @@ class Login(object):
         from urllib.request import urlretrieve
         urlretrieve(imgurl, imgsavepath)
 
+    def get_position(self, chunk, canves):
+        """
+        判断缺口位置
+        :param chunk:   缺口图片(验证码中的大图)
+        :param canves:  验证码中的拼图
+        :return:        位置 x, y
+        """
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        # cv2.imread()用于读取图片文件；图片路径，读取图片的形式（1表示彩色图片[默认]，0表示灰度图片，-1表示原来的格式）
+        chunk = cv2.imread(chunk, 0)  # 读取大图(灰化)
+        canves = cv2.imread(canves, 0)  # 读取拼图(灰化)
+        h, w = canves.shape[::1]
+
+        # 二值化后的图片名称Ω
+        slide_puzzle = base_dir + "/image/slide_puzzle.jpg"
+        slide_bg = base_dir + "/image/slide_bg.jpg"
+        # 将二值化后的图片进行保存
+        # cv2.imwrite()用于保存图片文件；参数1：保存的图像名称，参数2：需要保存的图像
+        cv2.imwrite(slide_bg, chunk)  # 保存大图
+        cv2.imwrite(slide_puzzle, canves)  # 保存拼图
+        # os.system('chmod 777 ' + base_dir + '/image/slide_puzzle.jpg')
+        # os.system('chmod 777 ' + base_dir + '/image/slide_bg.jpg')
+        chunk = cv2.imread(slide_bg)  # 使用cv2.imread()读出来的是BGR数据格式
+        # cv2.cvtColor(p1, p2) 是颜色空间转换函数    参数1：需要转换的图片，参数2：转换成何种格式
+        # cv2.COLOR_BGR2RGB:将BGR格式转换成RGB格式      cv2.COLOR_BGR2GRAY:将BGR格式转换成灰度图片
+        chunk = cv2.cvtColor(chunk, cv2.COLOR_BGR2GRAY)
+
+        chunk = abs(255 - chunk)
+        cv2.imwrite(slide_bg, chunk)
+        chunk = cv2.imread(slide_bg)  # 读取大图
+        canves = cv2.imread(slide_puzzle)  # 读取拼图
+
+        # 获取偏移量
+        result = cv2.matchTemplate(chunk, canves, cv2.TM_CCOEFF_NORMED)
+
+        # 得到最大和最小值得位置
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        top_left = min_loc  # 左上角的位置
+        bottom_right = (top_left[0] + w, top_left[1] + h)  # 右下角的位置
+
+        # 在原图上画矩形
+        cv2.rectangle(chunk, top_left, bottom_right, (0, 0, 255), 2)
+
+        # 显示原图和处理后的图像
+        cv2.imshow("img_template", chunk)
+        cv2.imshow("processed", canves)
+
+        cv2.waitKey(0)
+
+        y, x = np.unravel_index(result.argmax(), result.shape)
+        return x
+
     def get_track(self, distance):
         """
-                模拟轨迹 假装是人在操作
-                :param distance:
-                :return:
-                """
+        模拟轨迹 假装是人在操作
+        :param distance:
+        :return:
+        """
         # 初速度
         v = 0
         # 单位时间为0.2s来统计轨迹，轨迹即0.2内的位移
@@ -144,6 +199,7 @@ class Login(object):
         # 到达mid值开始减速
         mid = distance * 7 / 8
 
+        distance += 10  # 先滑过一点，最后再反着滑动回来
         # a = random.randint(1,3)
         while current < distance:
             if current < mid:
@@ -155,7 +211,7 @@ class Login(object):
             # 初速度
             v0 = v
             # 0.2秒时间内的位移
-            s = v0 * t + 5 * a * (t ** 2)
+            s = v0 * t + 0.5 * a * (t ** 2)
             # 当前的位置
             current += s
             # 添加到轨迹列表
@@ -165,11 +221,12 @@ class Login(object):
             v = v0 + a * t
 
         # 反着滑动到大概准确位置
-        # for i in range(4):
-        #     tracks.append(-random.randint(2, 3))
-        # for i in range(4):
-        #     tracks.append(-random.randint(1, 3))
+        for i in range(4):
+            tracks.append(-random.randint(2, 3))
+        for i in range(4):
+            tracks.append(-random.randint(1, 3))
         return tracks
+
 
     def login_main(self):
         try:
@@ -184,33 +241,69 @@ class Login(object):
             driver.find_element_by_xpath("//*[@class='SignFlow-tabs']/*[2]").click()
 
             # 随机等待时间，以免被反爬虫
-            time.sleep(random.uniform(10, 15))
+            time.sleep(random.uniform(1, 3))
 
             driver.find_element_by_xpath("//input[@name='username']").send_keys(self.account)
             driver.find_element_by_xpath("//input[@name='password']").send_keys(self.password)
 
             # 随机等待时间，以免被反爬虫
-            time.sleep(random.uniform(10, 15))
+            time.sleep(random.uniform(1, 3))
 
             driver.find_element_by_xpath("//button[@type='submit']").click()
 
             # 随机等待时间，以免被反爬虫
-            time.sleep(random.uniform(10, 15))
+            time.sleep(random.uniform(1, 3))
+
+            bk_block = driver.find_element_by_xpath('//img[@class="yidun_bg-img"]')
+            web_image_width = bk_block.size['width']
+            bk_block_x = bk_block.location['x']
+
+            slide_block = driver.find_element_by_xpath('//img[@class="yidun_jigsaw"]')  # 获取验证码中的拼图
+            # print(bk_block.location)                  # 该图片对象在弹出的验证码框中的位置，返回字典的格式，例如：{'x': 36, 'y': 102}
+            slide_block_x = slide_block.location['x']  # 获取该图片对象在验证码框中的位置(x轴)
 
             # 获取验证码中的大图url
             bk_block = driver.find_element_by_xpath('//img[@class="yidun_bg-img"]').get_attribute('src')
             # 获取验证码中的拼图url
-            slide_block = driver.find_element_by_xpath('//img[@id="slideBlock"]').get_attribute('src')
+            slide_block = driver.find_element_by_xpath('//img[@class="yidun_jigsaw"]').get_attribute('src')
             # 获取滑块
             slid_ing = driver.find_element_by_xpath('//div[@class="yidun_slider"]')
 
             base_dir = os.path.dirname(os.path.abspath(__file__))
             os.makedirs(base_dir + '/image/', exist_ok=True)
             self.urllib_download(bk_block, base_dir + '/image/bkBlock.png')
-            os.system('chmod 777 ' + base_dir + '/image/bkBlock.png')
+            # os.system('chmod 777 ' + base_dir + '/image/bkBlock.png')
             self.urllib_download(slide_block, base_dir + '/image/slideBlock.png')
-            os.system('chmod 777 ' + base_dir + '/image/slideBlock.png')
-            time.sleep(0.2)
+            # os.system('chmod 777 ' + base_dir + '/image/slideBlock.png')
+
+            # 随机等待时间，以免被反爬虫
+            time.sleep(random.uniform(1, 3))
+
+            img_bkblock = Image.open(base_dir + '/image/bkBlock.png')
+            real_width = img_bkblock.size[0]
+            width_scale = float(real_width) / float(web_image_width)
+
+            position_x = self.get_position(base_dir + '/image/bkBlock.png',
+                                           base_dir + '/image/slideBlock.png')  # 获取到 大图 与 拼图 位移的距离 (实际滑动的距离就是x轴的距离)
+
+            real_position = position_x / width_scale  # 将大图/比例，得到验证码框中大图与拼图实际的滑动距离
+
+            real_position = real_position - (
+                    slide_block_x - bk_block_x)  # (slide_block_x - bk_block_x):即拼图到大图的左边距，所以减去左边距后才得到真正的滑动距离
+
+            track_list = self.get_track(real_position)  # 调用get_track()方法，传入真实距离参数，得出移动轨迹
+
+            ActionChains(driver).click_and_hold(on_element=slid_ing).perform()  # 找到滑块元素，点击鼠标左键，按住不放
+            time.sleep(0.02)
+            # 拖动元素
+            for track in track_list:
+                ActionChains(driver).move_by_offset(xoffset=track, yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
+                time.sleep(0.01)
+            time.sleep(0.5)
+            # print("验证滑块结束")
+            ActionChains(driver).release(on_element=slid_ing).perform()  # 释放鼠标
+            time.sleep(2)
+
 
             print('1')
 
