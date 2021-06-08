@@ -130,6 +130,52 @@ class Login(object):
         from urllib.request import urlretrieve
         urlretrieve(imgurl, imgsavepath)
 
+    """
+    复杂图像处理：
+        https://blog.csdn.net/sinat_36458870/article/details/78825571?utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.control&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7EBlogCommendFromMachineLearnPai2%7Edefault-1.control
+    """
+    def get_position_senior(self, chunk, canves):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        # cv2.imread()用于读取图片文件；图片路径，读取图片的形式（1表示彩色图片[默认]，0表示灰度图片，-1表示原来的格式）
+        chunk = cv2.imread(chunk)  # 读取大图(灰化)
+        canves = cv2.imread(canves)  # 读取拼图(灰化)
+
+        chunk_gray = cv2.cvtColor(chunk, cv2.COLOR_BGR2GRAY)    # 灰化
+        canves_gray = cv2.cvtColor(canves, cv2.COLOR_BGR2GRAY)  # 灰化
+
+        chunk_blurred = cv2.GaussianBlur(chunk_gray, (9, 9), 0)     # 去噪
+        canves_blurred = cv2.GaussianBlur(canves_gray, (9, 9), 0)   # 去噪
+
+        chunk_gradX = cv2.Sobel(chunk_blurred, ddepth=cv2.CV_32F, dx=1, dy=0)   # 提取梯度
+        chunk_gradY = cv2.Sobel(chunk_blurred, ddepth=cv2.CV_32F, dx=0, dy=1)
+        canves_gradX = cv2.Sobel(canves_blurred, ddepth=cv2.CV_32F, dx=1, dy=0)
+        canves_gradY = cv2.Sobel(canves_blurred, ddepth=cv2.CV_32F, dx=0, dy=1)
+
+        chunk_gradient = cv2.subtract(chunk_gradX, chunk_gradY)
+        chunk_gradient = cv2.convertScaleAbs(chunk_gradient)
+        canves_gradient = cv2.subtract(canves_gradX, canves_gradY)
+        canves_gradient = cv2.convertScaleAbs(canves_gradient)
+
+        methods = [cv2.TM_SQDIFF_NORMED, cv2.TM_CCORR_NORMED, cv2.TM_CCOEFF_NORMED]
+        methods = [cv2.TM_CCOEFF_NORMED]
+        th, tw = canves_gradient.shape[:2]
+        for md in methods:
+            result = cv2.matchTemplate(chunk_gradient, canves_gradient, md)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            if md == cv2.TM_SQDIFF_NORMED:
+                tl = min_loc
+            else:
+                tl = max_loc
+            br = (tl[0] + tw, tl[1] + th)
+            cv2.rectangle(chunk, tl, br, [0, 0, 0])
+            # cv2.imshow("pipei" + np.str(md), chunk)
+            cv2.imwrite(base_dir + "/image/"+"pipei" + np.str(md)+".jpg", chunk)  # 保存大图
+
+            y, x = np.unravel_index(result.argmax(), result.shape)
+
+        print(x)
+        return x
+
     def get_position(self, chunk, canves):
         """
         判断缺口位置
@@ -221,19 +267,17 @@ class Login(object):
             v = v0 + a * t
 
         # 反着滑动到大概准确位置
-        for i in range(4):
-            tracks.append(-random.randint(2, 3))
-        for i in range(4):
-            tracks.append(-random.randint(1, 3))
+        # for i in range(4):
+        #     tracks.append(-random.randint(2, 3))
+        # for i in range(4):
+        #     tracks.append(-random.randint(1, 3))
         return tracks
-
 
     def login_main(self):
         try:
             #         ssl._create_default_https_context = ssl._create_unverified_context
             driver = self.driver
             driver.get(self.url)
-
             # 设置最大等待时间
             driver.implicitly_wait(10)
 
@@ -283,7 +327,7 @@ class Login(object):
             real_width = img_bkblock.size[0]
             width_scale = float(real_width) / float(web_image_width)
 
-            position_x = self.get_position(base_dir + '/image/bkBlock.png',
+            position_x = self.get_position_senior(base_dir + '/image/bkBlock.png',
                                            base_dir + '/image/slideBlock.png')  # 获取到 大图 与 拼图 位移的距离 (实际滑动的距离就是x轴的距离)
 
             real_position = position_x / width_scale  # 将大图/比例，得到验证码框中大图与拼图实际的滑动距离
@@ -300,65 +344,19 @@ class Login(object):
                 ActionChains(driver).move_by_offset(xoffset=track, yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
                 time.sleep(0.01)
             time.sleep(0.5)
-            # print("验证滑块结束")
+            print("验证滑块结束")
             ActionChains(driver).release(on_element=slid_ing).perform()  # 释放鼠标
-            time.sleep(2)
-
-
-            print('1')
-
-
-
-
-            driver.switch_to.frame(driver.find_element_by_tag_name("iframe"))
-
-            driver.find_element_by_xpath("//*[@id='fm-login-id']").send_keys(self.account)
-            driver.find_element_by_xpath("//*[@id='fm-login-password']").send_keys(self.password)
-
-            # 随机等待时间，以免被反爬虫
-            time.sleep(random.uniform(10, 15))
-
-            driver.switch_to.frame(driver.find_element_by_id("baxia-dialog-content"))
-
-            # 找到登录窗口滑动背景验证的方块
-            slider_square_bg = driver.find_element_by_xpath("//*[@id='nc_2__scale_text']")
-            print(slider_square_bg.size)
-            slider_square_bg_width = slider_square_bg.size['width']
-
-            # 找到登录窗口滑动验证的方块
-            slider_square = driver.find_element_by_xpath("//*[@id='nc_2_n1z']")
-            # 得到登录窗口滑动验证方块的宽度
-            slider_square_width = slider_square.size['width']
-            print(slider_square.size)
-            print(slider_square.location)
-            location_x = slider_square.location['x']
-
-            # 获取移动轨迹
-            track_list = self.get_track(slider_square_bg_width - slider_square_width)   # 调用get_track()方法，传入真实距离参数，得出移动轨迹
-
-            # 判断方块是否显示，是则模拟鼠标滑动，否则跳过
-            if slider_square.is_displayed():
-                # 找到滑块元素，点击鼠标左键，按住不放
-                ActionChains(driver).click_and_hold(slider_square).perform()  # 点击鼠标左键，不松开 perform() ——执行链中的所有动作
-                ActionChains(driver).move_by_offset(xoffset=location_x+(slider_square_bg_width - slider_square_width), yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
-
-                # # 拖动元素
-                # for track in track_list:
-                #     print(track)
-                #     ActionChains(driver).move_by_offset(xoffset=track, yoffset=0).perform()  # 根据运动轨迹(x轴)，进行拖动
-                #     time.sleep(0.001)
-
-                time.sleep(0.5)
-                # print("验证滑块结束")
-                ActionChains(driver).release(on_element=slider_square).perform()  # 释放鼠标
-
-            # 切换到主html(最外层html)
-            driver.switch_to.default_content()
-            print(driver.find_element_by_xpath("//button[@class='fm-button fm-submit password-login']").text())
-
-            cookies_all = json.dumps(self.driver.get_cookies())
-
-            pass
+            error_message = driver.find_element_by_xpath('//div[@class="Notification-textSection Notification-textSection--withoutButton"]').text
+            """
+            滑块验证通过后，知乎会报请求参数异常，展示无法定位原因
+            """
+            if(error_message):
+                print(error_message)
+                return False
+            else:
+                cookies_all = json.dumps(self.driver.get_cookies())
+                result = self.save_cookie(cookies_all)
+                return True
         except Exception as e:
             print('str(Exception):\t', str(Exception))
             print('str(e):\t\t', str(e))
