@@ -17,8 +17,8 @@ import random
 class Login(object):
     def __init__(self):
         if len(sys.argv) < 3:
-            self.account = '17789736213'
-            self.password = 'CG19940915CG.cheng'
+            self.account = '1778973****'
+            self.password = '******'
         else:
             self.account = sys.argv[1]
             self.password = sys.argv[2]
